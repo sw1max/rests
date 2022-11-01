@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"rests.com/internal/middleware"
 	"rests.com/internal/taskstore"
 )
 
@@ -113,20 +115,37 @@ func (ts *taskServer) getTaskHandler(c *gin.Context) {
 }
 
 func main() {
-	// Set up middleware for logging and panic recovery explicitly.
-	router := gin.New()
-	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
+	certFile := flag.String("certfile", "cert.pem", "certificate PEM file")
+	keyFile := flag.String("keyfile", "key.pem", "key PEM file")
+	flag.Parse()
 
+	router := mux.NewRouter()
+	router.StrictSlash(true)
 	server := NewTaskServer()
 
-	router.POST("/task/", server.createTaskHandler)
-	router.GET("/task/", server.getAllTasksHandler)
-	router.DELETE("/task/", server.deleteAllTasksHandler)
-	router.GET("/task/:id", server.getTaskHandler)
-	router.DELETE("/task/:id", server.deleteTaskHandler)
-	router.GET("/tag/:tag", server.tagHandler)
-	router.GET("/due/:year/:month/:day", server.dueHandler)
+	// The "create task" path is protected with the BasicAuth middleware.
+	router.Handle("/task/",
+		middleware.BasicAuth(http.HandleFunc(server.createTaskHandler))).Methods("POST")
+	router.HandleFunc("/task/", server.getAllTasksHandler).Methods("GET")
+	router.HandleFunc("/task/", server.deleteAllTasksHandler).Methods("DELETE")
+	router.HandleFunc("/task/{id:[0-9]+}", server.getTaskHandler).Methods("GET")
+	router.HandleFunc("/task/{id:[0-9]+}", server.deleteTaskHandler).Methods("DELETE")
+	router.HandleFunc("/tag/{tag}", server.tagHandler).Methods("GET")
+	router.HandleFunc("/due/{year:[0-9]+}/{month:[0-9]+}/{day:[0-9]+}/", server.dueHandler).Methods("GET")
 
-	router.Run("localhost:" + os.Getenv("SERVERPORT"))
+	// Set up logging and panic recovery middleware for all paths.
+	router.Use(handlers.RecoveryHandler(handlers.PrintRecoveryStack(true)))
+
+	addr := "localhost:" + os.Getenv("SERVERPORT")
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: router,
+		TLSConfig: &tls.Config{
+			MinVersion:               tls.VersionTLS13,
+			PreferServerCipherSuites: true,
+		},
+	}
+
+	log.Printf("Starting server on %s", addr)
+	log.Fatal(srv.ListenAndServeTLS(*certFile, *keyFile))
 }
