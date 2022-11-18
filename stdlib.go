@@ -1,3 +1,4 @@
+// ref: Eli Bendersky [https://eli.thegreenplace.net]
 package main
 
 import (

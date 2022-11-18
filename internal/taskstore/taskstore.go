@@ -21,7 +21,7 @@ func (ts *TaskStore) CreateTask(text string, tags []string, due time.Time) int
 func (ts *TaskStore) GetTask(id int) (Task, error)
 
 // DeleteTask deletes the task with the given id. If no such id exists, an error
-// is returned.
+// is
 
 func (ts *TaskStore) DeleteTask(id int) error
 
